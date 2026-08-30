@@ -1,0 +1,50 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+
+metadata:
+  name: mongodb
+  namespace: argocd
+
+spec:
+  project: default
+
+  sources:
+    # MongoDB itself
+    - repoURL: https://charts.bitnami.com/bitnami
+      chart: mongodb
+      targetRevision: 19.1.31
+
+      helm:
+        values: |
+          architecture: replicaset
+          replicaCount: 3
+          arbiter:
+            enabled: false
+          auth:
+            enabled: true
+            usernames:
+              - app_user
+            databases:
+              - contact_book_db
+            existingSecret: mongodb-auth
+          persistence:
+            enabled: true
+            storageClass: ebs-csi-gp3
+            size: 8Gi
+
+    # MongoDB credentials / External Secrets resources
+    - repoURL: "git@github.com:shakeddukeman25/DevOps-Portfolio-Cluster_Resources.git"
+      targetRevision: main
+      path: applications/mongodb
+
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: mongodb
+
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+
+    syncOptions:
+      - CreateNamespace=true

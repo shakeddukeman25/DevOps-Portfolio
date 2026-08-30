@@ -1,0 +1,78 @@
+name: Contact Book CI-CD
+on:
+  push:
+    branches:
+      - main
+env:
+    VERSION: 1.0.${{ github.run_number }} # Automatically increments the patch version based on the GitHub workflow run count
+jobs:
+  builder:
+    runs-on: ubuntu-latest
+    permissions: # Required to request the OIDC JWT token from GitHub
+      id-token: write
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v4
+        with:
+          python-version: 3.12
+      - name: Install dependencies
+        run: |
+          pip install --no-cache-dir -r requirements.txt
+      - name: Run unit tests
+        run: |
+          pytest tests/unit_test.py -v
+      - name: Deploy integration test environment
+        env: #only relevent for the pipeline
+          DB_USER: root
+          DB_PASSWORD: password
+          DB_NAME: app_db
+        run: |
+          docker compose up -d --build
+      - name: Run Integration tests
+        run: |
+          pytest tests/integration_test.py -v
+      - name: Clean up integration environment
+        if: always() # Always clean up the test environment, even if previous steps fail
+        run: |
+          docker compose down -v
+      - name: Configure AWS credentials via OIDC # Authenticates GitHub to AWS via OIDC to get short-lived, temporary access tokens.
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: arn:aws:iam::451626663367:role/github-actions-oidc-role
+          aws-region: ap-south-1
+      - name: Login to Amazon ECR
+        # Authenticates Docker CLI to Amazon ECR Private to enable push/pull operations
+        id: login-ecr # Set ID to capture the ECR registry URL and reference it in later steps
+        uses: aws-actions/amazon-ecr-login@v2
+      - name: Tag Docker Image
+        env:
+          ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }} #ECR Domain
+          ECR_REPOSITORY: development/contact_book
+        run: |
+          docker tag devops-portfolio-contact-book_app-app:latest $ECR_REGISTRY/$ECR_REPOSITORY:${{ env.VERSION }}
+      - name: Push Docker Image
+        env:
+          ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+          ECR_REPOSITORY: development/contact_book
+        run: |
+          docker push $ECR_REGISTRY/$ECR_REPOSITORY:${{ env.VERSION }}
+      - name: Update Version in GitOps Repository
+        env:
+          GITOPS_REPO: "shakeddukeman25/DevOps-Portfolio-Cluster_Resources" 
+          MANIFEST_FILE: "applications/contact-book/deployment.yaml" 
+          IMAGE_TAG: ${{ env.VERSION }}
+          GITOPS_TOKEN: ${{ secrets.GITOPS_PAT }}
+        run: |
+          # Clone the target GitOps repository using the Personal Access Token
+          git clone https://x-access-token:${GITOPS_TOKEN}@github.com/${GITOPS_REPO}.git gitops-repo
+          cd gitops-repo
+          # Set Git user for committing changes (commit author will be GitHub Actions bot)
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          # Update the Docker image tag in the deployment YAML file
+          sed -i "s|image: .*/development/contact_book:.*|image: ${{ steps.login-ecr.outputs.registry }}/development/contact_book:${IMAGE_TAG}|g" ${MANIFEST_FILE}
+          # Commit and push changes to trigger ArgoCD synchronization
+          git add ${MANIFEST_FILE}
+          git diff-index --quiet HEAD || (git commit -m "ci: update contact-book image to ${IMAGE_TAG}" && git push)

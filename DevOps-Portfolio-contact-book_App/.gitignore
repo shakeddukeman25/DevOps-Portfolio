@@ -1,0 +1,5 @@
+# Environment variables
+.env
+
+# Windows Metadata
+*:Zone.Identifier

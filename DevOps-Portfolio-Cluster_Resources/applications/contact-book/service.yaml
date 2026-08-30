@@ -1,0 +1,19 @@
+# ==============================================================================
+# Service: contact-book
+# Purpose: Exposes contact-book Pods internally within the cluster and load balances traffic.
+# Routing: Maps internal cluster port 80 to container port 5000.
+# Selector: Directs traffic to Pods with the label "app: contact-book".
+# ==============================================================================
+apiVersion: v1
+kind: Service
+metadata:
+  labels:
+    app: contact-book
+  name: contact-book
+spec:
+  type: ClusterIP
+  ports:
+  - port: 80
+    targetPort: 5000
+  selector:
+    app: contact-book

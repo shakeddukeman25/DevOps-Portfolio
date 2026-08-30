@@ -1,0 +1,24 @@
+# Windows / macOS / Linux metadata
+*:Zone.Identifier
+*.Zone.Identifier
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Editor / IDE
+*.swp
+*.swo
+*~
+.vscode/
+.idea/
+
+# Local env / secrets
+.env
+.env.local
+*.local
+
+# Build / cache
+node_modules/
+__pycache__/
+.venv/
+venv/

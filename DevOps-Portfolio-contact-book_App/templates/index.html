@@ -1,0 +1,416 @@
+<!DOCTYPE html>
+<html lang="en" dir="ltr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Contact Book</title>
+
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 1000px;
+            margin: 40px auto;
+            padding: 0 20px;
+            background: #f5f5f5;
+        }
+
+        h1 {
+            text-align: center;
+        }
+
+        .card {
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
+        }
+
+        .status {
+            padding: 12px;
+            border-radius: 6px;
+            margin-bottom: 20px;
+            font-weight: bold;
+        }
+
+        .status.ok {
+            background: #e7f7ec;
+            border: 1px solid #8bd19d;
+        }
+
+        .status.error {
+            background: #fff1f1;
+            border: 1px solid #e0a0a0;
+        }
+
+        .hidden {
+            display: none;
+        }
+
+        .form-row {
+            display: flex;
+            gap: 10px;
+            flex-wrap: wrap;
+            align-items: center;
+        }
+
+        input,
+        select {
+            padding: 10px;
+            margin: 5px 0;
+            box-sizing: border-box;
+        }
+
+        .contact-input {
+            flex: 1;
+            min-width: 180px;
+        }
+
+        #searchValue {
+            flex: 1;
+            min-width: 240px;
+        }
+
+        button {
+            padding: 10px 14px;
+            margin: 5px 0;
+            cursor: pointer;
+        }
+
+        button:disabled,
+        input:disabled,
+        select:disabled {
+            cursor: not-allowed;
+            opacity: 0.55;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            background: white;
+        }
+
+        th, td {
+            border: 1px solid #ddd;
+            padding: 10px;
+            text-align: left;
+        }
+
+        .actions {
+            white-space: nowrap;
+        }
+
+        .empty-message {
+            text-align: center;
+            padding: 20px;
+        }
+
+        .contact-id {
+            font-family: monospace;
+            font-size: 12px;
+            word-break: break-all;
+        }
+    </style>
+</head>
+
+<body>
+
+    <h1>Contact Book</h1>
+
+    <div id="dbStatus" class="status hidden"></div>
+
+    <div class="card">
+        <h2>Add Contact</h2>
+        <div class="form-row">
+            <input class="contact-input" id="name" placeholder="Name">
+            <input class="contact-input" id="phone" placeholder="Phone">
+            <input class="contact-input" id="email" placeholder="Email">
+            <button id="addButton" onclick="addPerson()">Add</button>
+        </div>
+    </div>
+
+    <div class="card">
+        <h2>Search Contacts</h2>
+        <div class="form-row">
+            <select id="searchField">
+                <option value="name">Name</option>
+                <option value="phone">Phone</option>
+                <option value="email">Email</option>
+                <option value="id">Unique ID</option>
+            </select>
+
+            <input id="searchValue" type="text" placeholder="Enter a search value..."
+                   onkeydown="if (event.key === 'Enter') searchPeople()">
+
+            <button onclick="searchPeople()">Search</button>
+            <button onclick="clearSearch()">Clear Search</button>
+        </div>
+    </div>
+
+    <div class="card">
+        <h2>Contacts</h2>
+
+        <button onclick="loadPeople()">Refresh List</button>
+
+        <table>
+            <thead>
+                <tr>
+                    <th>Unique ID</th>
+                    <th>Name</th>
+                    <th>Phone</th>
+                    <th>Email</th>
+                    <th>Actions</th>
+                </tr>
+            </thead>
+            <tbody id="peopleTable"></tbody>
+        </table>
+    </div>
+
+    <script>
+        function setDatabaseAvailable(available) {
+            const status = document.getElementById("dbStatus");
+
+            const controls = [
+                document.getElementById("name"),
+                document.getElementById("phone"),
+                document.getElementById("email"),
+                document.getElementById("addButton"),
+                document.getElementById("searchField"),
+                document.getElementById("searchValue")
+            ];
+
+            status.classList.remove("hidden", "ok", "error");
+
+            if (available) {
+                status.classList.add("ok");
+                status.textContent =
+                    "MongoDB is connected. All contact book operations are available.";
+            } else {
+                status.classList.add("error");
+                status.textContent =
+                    "MongoDB is currently unavailable. The website is still running, but database operations are unavailable.";
+            }
+
+            controls.forEach(element => {
+                element.disabled = !available;
+            });
+        }
+
+
+        async function loadPeople() {
+            await fetchPeople("/person");
+        }
+
+
+        async function searchPeople() {
+            const field = document.getElementById("searchField").value;
+            const value = document.getElementById("searchValue").value.trim();
+
+            if (!value) {
+                alert("Please enter a search value.");
+                return;
+            }
+
+            const url =
+                `/person?field=${encodeURIComponent(field)}&value=${encodeURIComponent(value)}`;
+
+            await fetchPeople(url);
+        }
+
+
+        async function clearSearch() {
+            document.getElementById("searchValue").value = "";
+            await loadPeople();
+        }
+
+
+        async function fetchPeople(url) {
+            const table = document.getElementById("peopleTable");
+            table.innerHTML = "";
+
+            try {
+                const response = await fetch(url);
+                const data = await response.json();
+
+                if (!response.ok) {
+                    if (response.status === 503) {
+                        setDatabaseAvailable(false);
+                    }
+
+                    table.innerHTML = `
+                        <tr>
+                            <td colspan="5" class="empty-message">
+                                ${escapeHtml(data.error || "Unable to load contacts.")}
+                            </td>
+                        </tr>
+                    `;
+                    return;
+                }
+
+                setDatabaseAvailable(true);
+                renderPeople(data);
+
+            } catch (error) {
+                setDatabaseAvailable(false);
+
+                table.innerHTML = `
+                    <tr>
+                        <td colspan="5" class="empty-message">
+                            Unable to connect to the server.
+                        </td>
+                    </tr>
+                `;
+            }
+        }
+
+
+        function renderPeople(people) {
+            const table = document.getElementById("peopleTable");
+            table.innerHTML = "";
+
+            if (people.length === 0) {
+                table.innerHTML = `
+                    <tr>
+                        <td colspan="5" class="empty-message">
+                            No contacts found.
+                        </td>
+                    </tr>
+                `;
+                return;
+            }
+
+            people.forEach(person => {
+                const row = document.createElement("tr");
+
+                row.innerHTML = `
+                    <td class="contact-id">${escapeHtml(person.id)}</td>
+                    <td>${escapeHtml(person.name)}</td>
+                    <td>${escapeHtml(person.phone)}</td>
+                    <td>${escapeHtml(person.email)}</td>
+                    <td class="actions">
+                        <button onclick='editPerson(${JSON.stringify(person)})'>Update</button>
+                        <button onclick="deletePerson('${person.id}')">Delete</button>
+                    </td>
+                `;
+
+                table.appendChild(row);
+            });
+        }
+
+
+        async function addPerson() {
+            const name = document.getElementById("name").value;
+            const phone = document.getElementById("phone").value;
+            const email = document.getElementById("email").value;
+
+            try {
+                const response = await fetch("/person", {
+                    method: "POST",
+                    headers: {"Content-Type": "application/json"},
+                    body: JSON.stringify({name, phone, email})
+                });
+
+                const result = await response.json();
+
+                if (!response.ok) {
+                    if (response.status === 503) {
+                        setDatabaseAvailable(false);
+                    }
+                    alert(result.error || "Error");
+                    return;
+                }
+
+                document.getElementById("name").value = "";
+                document.getElementById("phone").value = "";
+                document.getElementById("email").value = "";
+
+                alert(`Contact created.\nUnique ID: ${result.id}`);
+
+                loadPeople();
+
+            } catch (error) {
+                setDatabaseAvailable(false);
+                alert("Unable to connect to the server.");
+            }
+        }
+
+
+        async function editPerson(person) {
+            const name = prompt("Name:", person.name);
+            if (name === null) return;
+
+            const phone = prompt("Phone:", person.phone);
+            if (phone === null) return;
+
+            const email = prompt("Email:", person.email);
+            if (email === null) return;
+
+            try {
+                const response = await fetch(`/person/${person.id}`, {
+                    method: "PUT",
+                    headers: {"Content-Type": "application/json"},
+                    body: JSON.stringify({name, phone, email})
+                });
+
+                const result = await response.json();
+
+                if (!response.ok) {
+                    if (response.status === 503) {
+                        setDatabaseAvailable(false);
+                    }
+                    alert(result.error || "Error");
+                    return;
+                }
+
+                loadPeople();
+
+            } catch (error) {
+                setDatabaseAvailable(false);
+                alert("Unable to connect to the server.");
+            }
+        }
+
+
+        async function deletePerson(id) {
+            if (!confirm("Delete this contact?")) {
+                return;
+            }
+
+            try {
+                const response = await fetch(`/person/${id}`, {
+                    method: "DELETE"
+                });
+
+                const result = await response.json();
+
+                if (!response.ok) {
+                    if (response.status === 503) {
+                        setDatabaseAvailable(false);
+                    }
+                    alert(result.error || "Error");
+                    return;
+                }
+
+                loadPeople();
+
+            } catch (error) {
+                setDatabaseAvailable(false);
+                alert("Unable to connect to the server.");
+            }
+        }
+
+
+        function escapeHtml(value) {
+            return String(value ?? "")
+                .replaceAll("&", "&amp;")
+                .replaceAll("<", "&lt;")
+                .replaceAll(">", "&gt;")
+                .replaceAll('"', "&quot;")
+                .replaceAll("'", "&#039;");
+        }
+
+        loadPeople();
+    </script>
+
+</body>
+</html>

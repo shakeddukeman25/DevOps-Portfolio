@@ -1,0 +1,28 @@
+# Git & CI/CD
+.git/
+.github/
+.gitignore
+
+# Environment & Credentials
+.env
+
+# Windows / WSL Metadata Files
+*:Zone.Identifier
+
+# Python Cache & Virtual Envs
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+venv/
+.venv/
+env/
+
+# Tests & Documentation
+tests/
+README.md
+
+# Infrastructure & Orchestration
+docker-compose.yaml
+Dockerfile
+.dockerignore

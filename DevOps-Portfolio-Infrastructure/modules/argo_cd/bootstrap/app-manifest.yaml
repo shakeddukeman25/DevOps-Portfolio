@@ -1,0 +1,18 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: cluster-resources
+  namespace: argocd
+spec:
+  destination:
+    namespace: default
+    server: https://kubernetes.default.svc
+  project: default
+  source:
+    repoURL: "git@github.com:shakeddukeman25/DevOps-Portfolio-Cluster_Resources.git"
+    targetRevision: main
+    path: ./applications
+  syncPolicy:
+    automated:
+      prune: true # Remove out-of-sync resources not in Git
+      selfHeal: true # Revert changes that drift from Git state

@@ -1,0 +1,13 @@
+# Terraform internal directory (Contains providers & modules binaries)
+.terraform/
+# State files
+*.tfstate
+*.tfstate.*
+# Crash logs
+crash.log
+crash.*.log
+# Sensitive variables
+*.tfvars
+*.tfvars.json
+# Exclude Windows Metadata
+*:Zone.Identifier
